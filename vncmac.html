@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MacVNC Turbo | High-Performance Web Client</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0c;
+            --panel-bg: #18181b;
+            --border-color: #3f3f46;
+            --accent-blue: #0078D4;
+            --accent-blue-hover: #005A9E;
+            --accent-green: #22c55e;
+            --accent-red: #ef4444;
+            --text-main: #f4f4f5;
+            --text-muted: #a1a1aa;
+        }
+
+        body { 
+            margin: 0; padding: 0; 
+            background-color: var(--bg-dark); color: var(--text-main); 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            display: flex; flex-direction: column; 
+            height: 100vh; overflow: hidden; 
+        }
+
+        /* Modernized Top Bar */
+        #top-bar { 
+            width: 100%; background: var(--panel-bg); padding: 12px 20px; 
+            display: flex; justify-content: space-between; align-items: center; 
+            box-sizing: border-box; border-bottom: 1px solid var(--border-color);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 10;
+        }
+
+        .brand {
+            display: flex; flex-direction: column; gap: 2px;
+        }
+        .brand-title { font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+        .brand-subtitle { font-size: 11px; color: var(--accent-green); font-weight: 500; }
+
+        .controls {
+            display: flex; gap: 18px; align-items: center;
+            background: #000; padding: 6px 16px; border-radius: 8px; border: 1px solid #27272a;
+        }
+
+        /* Server Input Styling */
+        .server-input-wrapper { display: flex; align-items: center; gap: 6px; }
+        .server-input-wrapper span { font-size: 12px; color: var(--text-muted); font-weight: 600;}
+        #wsUrl {
+            background: #27272a; color: #fff; border: 1px solid #3f3f46; 
+            padding: 4px 8px; border-radius: 4px; font-size: 12px; font-family: monospace;
+            width: 140px; transition: border-color 0.2s;
+        }
+        #wsUrl:focus { outline: none; border-color: var(--accent-blue); }
+
+        .divider { width: 1px; height: 20px; background: #3f3f46; }
+
+        .control-group { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
+        input[type="range"] { width: 60px; accent-color: var(--text-muted); cursor: pointer; }
+        
+        .overdrive-label {
+            color: var(--accent-red); font-weight: 700; cursor: pointer;
+            text-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
+            display: flex; align-items: center; gap: 5px; font-size: 13px;
+        }
+        .overdrive-label input { accent-color: var(--accent-red); cursor: pointer; }
+
+        .toggle-label {
+            color: var(--text-main); font-weight: 500; cursor: pointer;
+            display: flex; align-items: center; gap: 5px; font-size: 13px;
+        }
+
+        .action-area { display: flex; align-items: center; gap: 15px; }
+        
+        #screen { 
+            flex-grow: 1; width: 100%; overflow: auto; 
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+            display: flex; justify-content: center; align-items: center;
+        }
+        
+        /* 🐛 BUG FIX: Guarantee mouse visibility */
+        #screen canvas { cursor: default !important; }
+
+        canvas { 
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8); 
+            transform: translateZ(0); 
+            backface-visibility: hidden;
+            perspective: 1000;
+        }
+
+        canvas.overdrive-active {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+            transform: translate3d(0, 0, 0);
+            will-change: transform, contents;
+        }
+
+        .btn { background: var(--accent-blue); color: white; border: none; padding: 6px 18px; border-radius: 5px; cursor: pointer; font-weight: 600; font-size: 13px; transition: background 0.2s;}
+        .btn:hover { background: var(--accent-blue-hover); }
+        .btn-danger { background: var(--accent-red); }
+        .btn-danger:hover { background: #dc2626; }
+        #status { color: var(--text-muted); font-size: 13px; font-weight: 500;}
+    </style>
+</head>
+<body>
+    <div id="top-bar">
+        <div class="brand">
+            <div class="brand-title">🍏 MacVNC Turbo</div>
+            <div class="brand-subtitle">Protocol-Level Cmd Mapping | Zero Double-Typing</div>
+        </div>
+        
+        <div class="controls">
+            <div class="server-input-wrapper" title="Proxy Server Address">
+                <span>🔌 Proxy:</span>
+                <input type="text" id="wsUrl" value="ws://127.0.0.1:6080">
+            </div>
+
+            <div class="divider"></div>
+
+            <label class="toggle-label" title="Disable to see raw 1:1 pixel perfection.">
+                <input type="checkbox" id="scaleBtn" checked> Scale
+            </label>
+
+            <label class="overdrive-label" title="Force Mac to output at max framerate & GPU acceleration">
+                <input type="checkbox" id="overdriveBtn"> 🚀 Overdrive
+            </label>
+
+            <div class="divider"></div>
+
+            <div class="control-group" title="Quality Level (0-9)">
+                <label>Q: <span id="q-val" style="color:#fff;">3</span></label>
+                <input type="range" id="quality" min="0" max="9" value="3">
+            </div>
+            <div class="control-group" title="Compression Level (0-9)">
+                <label>C: <span id="c-val" style="color:#f59e0b; font-weight:bold;">8</span></label>
+                <input type="range" id="compression" min="0" max="9" value="8">
+            </div>
+        </div>
+
+        <div class="action-area">
+            <span id="status">Ready</span>
+            <button class="btn" id="connectBtn">Connect</button>
+        </div>
+    </div>
+    <div id="screen"></div>
+
+    <script type="module">
+        import RFB from 'https://cdn.jsdelivr.net/npm/@novnc/novnc@1.4.0/core/rfb.js';
+
+        let rfb;
+        const screenDiv = document.getElementById('screen');
+        const statusSpan = document.getElementById('status');
+        const connectBtn = document.getElementById('connectBtn');
+        const wsUrlInput = document.getElementById('wsUrl');
+        const qSlider = document.getElementById('quality');
+        const cSlider = document.getElementById('compression');
+        const overdriveBtn = document.getElementById('overdriveBtn');
+        const scaleBtn = document.getElementById('scaleBtn');
+
+        // ==========================================
+        // UI Interaction Logic
+        // ==========================================
+        qSlider.addEventListener('input', (e) => {
+            document.getElementById('q-val').innerText = e.target.value;
+            if (rfb && !overdriveBtn.checked) rfb.qualityLevel = parseInt(e.target.value);
+        });
+        cSlider.addEventListener('input', (e) => {
+            document.getElementById('c-val').innerText = e.target.value;
+            if (rfb && !overdriveBtn.checked) rfb.compressionLevel = parseInt(e.target.value);
+        });
+
+        scaleBtn.addEventListener('change', (e) => {
+            if (rfb) {
+                rfb.scaleViewport = e.target.checked;
+                if(e.target.checked) {
+                    screenDiv.style.alignItems = 'center';
+                    screenDiv.style.justifyContent = 'center';
+                } else {
+                    screenDiv.style.alignItems = 'flex-start';
+                    screenDiv.style.justifyContent = 'flex-start';
+                }
+            }
+        });
+
+        overdriveBtn.addEventListener('change', (e) => {
+            const isOverdrive = e.target.checked;
+            const canvas = screenDiv.querySelector('canvas');
+            
+            if (isOverdrive) {
+                qSlider.disabled = true;
+                cSlider.disabled = true;
+                document.getElementById('q-val').innerText = '0 (MAX)';
+                document.getElementById('c-val').innerText = '1 (MAX)';
+                
+                if (rfb) {
+                    rfb.qualityLevel = 0;
+                    rfb.compressionLevel = 1;
+                }
+                if (canvas) canvas.classList.add('overdrive-active');
+            } else {
+                qSlider.disabled = false;
+                cSlider.disabled = false;
+                document.getElementById('q-val').innerText = qSlider.value;
+                document.getElementById('c-val').innerText = cSlider.value;
+                
+                if (rfb) {
+                    rfb.qualityLevel = parseInt(qSlider.value);
+                    rfb.compressionLevel = parseInt(cSlider.value);
+                }
+                if (canvas) canvas.classList.remove('overdrive-active');
+            }
+        });
+
+        // ==========================================
+        // SAFE BROWSER OVERRIDE (To prevent native Copy/Paste popup)
+        // ==========================================
+        window.addEventListener('keydown', (e) => {
+            if (!rfb) return;
+            // Intercept Ctrl or Win combos to prevent browser native actions, let it pass to noVNC
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault(); 
+            }
+        }, { capture: true, passive: false });
+
+        // ==========================================
+        // VNC Connection Core
+        // ==========================================
+        connectBtn.addEventListener('click', () => {
+            if (rfb) { rfb.disconnect(); return; }
+
+            const wsUrl = wsUrlInput.value.trim();
+            if (!wsUrl) {
+                alert("Please enter a valid Proxy WebSocket URL.");
+                return;
+            }
+
+            statusSpan.innerText = "Negotiating...";
+            
+            try {
+                rfb = new RFB(screenDiv, wsUrl);
+
+                // ==========================================
+                // 🚀 THE PERFECT PROTOCOL-LEVEL MONKEY PATCH
+                // Using "arguments" array ensures we don't drop ANY internal noVNC parameters!
+                // This guarantees normal typing works while Ctrl/Cmd are perfectly swapped.
+                // ==========================================
+                const originalSendKey = rfb.sendKey;
+                rfb.sendKey = function() {
+                    let keysym = arguments[0];
+                    // 0xFFE3: Left Ctrl, 0xFFE4: Right Ctrl
+                    // 0xFFEB: Left Super(Mac Cmd), 0xFFEC: Right Super
+                    if (keysym === 0xFFE3) { keysym = 0xFFEB; }      // Win Ctrl -> Mac Cmd
+                    else if (keysym === 0xFFE4) { keysym = 0xFFEC; } // Win Right Ctrl -> Mac Cmd
+                    else if (keysym === 0xFFEB) { keysym = 0xFFE3; } // Win Key -> Mac Ctrl
+                    else if (keysym === 0xFFEC) { keysym = 0xFFE4; } // Right Win Key -> Mac Ctrl
+                    
+                    arguments[0] = keysym;
+                    return originalSendKey.apply(rfb, arguments);
+                };
+                
+                // Init settings
+                rfb.scaleViewport = scaleBtn.checked;
+                if(!scaleBtn.checked) {
+                    screenDiv.style.alignItems = 'flex-start';
+                    screenDiv.style.justifyContent = 'flex-start';
+                }
+                rfb.resizeSession = true;
+
+                if (overdriveBtn.checked) {
+                    rfb.qualityLevel = 0;
+                    rfb.compressionLevel = 1;
+                } else {
+                    rfb.qualityLevel = parseInt(qSlider.value);
+                    rfb.compressionLevel = parseInt(cSlider.value);
+                }
+
+                rfb.addEventListener("credentialsrequired", (e) => {
+                    let creds = {};
+                    if (e.detail.types.includes("username")) {
+                        creds.username = prompt("Apple Auth: Enter Mac [Username]:");
+                        if (creds.username === null) { rfb.disconnect(); return; }
+                    }
+                    if (e.detail.types.includes("password")) {
+                        creds.password = prompt("Enter corresponding [Password]:");
+                        if (creds.password === null) { rfb.disconnect(); return; }
+                    }
+                    rfb.sendCredentials(creds);
+                    statusSpan.innerText = "Verifying...";
+                });
+
+                rfb.addEventListener("connect", () => {
+                    statusSpan.innerText = "✅ Connected";
+                    statusSpan.style.color = "var(--accent-green)";
+                    connectBtn.innerText = "Disconnect";
+                    connectBtn.classList.add("btn-danger");
+                    wsUrlInput.disabled = true;
+                    
+                    if (overdriveBtn.checked) {
+                        const canvas = screenDiv.querySelector('canvas');
+                        if (canvas) canvas.classList.add('overdrive-active');
+                    }
+                });
+
+                rfb.addEventListener("disconnect", (e) => {
+                    statusSpan.innerText = e.detail.clean ? "Disconnected" : "❌ Dropped";
+                    statusSpan.style.color = e.detail.clean ? "var(--text-muted)" : "var(--accent-red)";
+                    connectBtn.innerText = "Connect";
+                    connectBtn.classList.remove("btn-danger");
+                    wsUrlInput.disabled = false;
+                    rfb = null;
+                });
+
+            } catch (err) {
+                statusSpan.innerText = "Init failed: " + err.message;
+            }
+        });
+    </script>
+</body>
+</html>
