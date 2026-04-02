@@ -37,13 +37,13 @@ Step 1: Run the Proxy / 运行底层代理 (Windows)
 Run the compiled proxy executable, pointing it to your Mac's IP address and a local port of your choice (e.g., 6080).
 (直接运行代理程序，指向你 Mac 在局域网的 IP 地址即可打通隧道：)
 
-proxy.exe <Your_Mac_IP> 6080
+WebsocketTcp.exe <Your_Mac_IP> 6080
 
 
 Step 2: Connect via the Web Client / 网页端一键连接
 
-Double click mac_vnc.html to open it in Chrome or Edge.
-(双击 mac_vnc.html 在浏览器中打开。)
+Double click vncmac.html to open it in Chrome or Edge.
+(双击 vncmac.html 在浏览器中打开。)
 
 Ensure the Proxy URL matches your local port (default: ws://127.0.0.1:6080).
 (确认界面上的代理端口与运行的一致。)
