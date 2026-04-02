@@ -1,2 +1,95 @@
-🍏 MacVNC-Turbo📖 Description / 项目简介MacVNC-Turbo is a brutally minimalist, zero-dependency solution for remote controlling a Mac from Windows.Its biggest feature: A tiny, standalone WebSocket proxy. You do not need to install any heavy third-party remote control software, clients, or runtime libraries on either machine. Just run the lightweight proxy executable, open the HTML file in your browser, and you get instant, ultra-low latency, native access to your macOS desktop.MacVNC-Turbo 是一个极致精简、零依赖的跨平台 Mac 远程控制解决方案。我们最大的特点： 核心仅包含一个极小的 WebSocket 代理程序。你完全不需要在两端安装任何臃肿的第三方远程软件、客户端或运行库。只需运行这个轻量级的代理，用浏览器打开一个网页，就可以直接获得超低延迟的 Mac 桌面控制权！极客、纯净、即插即用。✨ Features / 核心特性🪶 Zero Dependencies & Browser-Based: No installations required. Connect directly via Chrome or Edge using a single HTML file.(零依赖 & 纯浏览器控制：无需安装任何客户端，一个 HTML 文件直接在 Edge/Chrome 浏览器中完成控制。)🚀 Tiny Ultra-Low Latency Proxy: A micro C++ native Windows proxy (WebSockify) that translates VNC frames at nanosecond speed.(极小体积的低延迟代理：原生的 C++ 微型代理程序，纳秒级转发 VNC 数据包，榨干局域网极限。)💻 Protocol-Level Modifier Swapping: Seamlessly use your Windows Ctrl key as the Mac Cmd key (e.g., Ctrl+C, Ctrl+V). Implemented via internal RFB protocol monkey-patching—zero double-typing bugs!(底层协议级按键映射：在 Windows 上习惯性按下 Ctrl+C/V/A，系统会自动将其在底层转换为 Mac 的 Cmd 指令发送，彻底消灭双击/抢跑 Bug。)🏎️ Overdrive Mode: Force macOS to stop applying heavy compression algorithms and let your Windows GPU take over the 3D rendering workload.(Overdrive 性能全开模式：强制接管浏览器 GPU 3D 渲染，解放高分辨率（Retina）下的卡顿灾难。)🪟 Pixel-Perfect 1:1 Display: Easily disable scaling to enjoy perfectly crisp, unscaled retina display text.(像素级原画显示：支持关闭浏览器缩放，实现 1:1 绝对物理像素点对点显示，字体锐利清晰。)🍏 Apple Auth Support: Automatically handles macOS's proprietary VNC authentication (requiring both username and password).(完美兼容 Apple Auth 协议：自动处理 macOS 专属的用户名+密码二次安全校验，告别连接卡死。)🛠️ Usage / 如何使用Step 1: Run the Proxy / 运行底层代理 (Windows)Run the compiled proxy executable, pointing it to your Mac's IP address and a local port of your choice (e.g., 6080).(直接运行代理程序，指向你 Mac 在局域网的 IP 地址即可打通隧道：)proxy.exe <Your_Mac_IP> 6080
-Step 2: Connect via the Web Client / 网页端一键连接Double click mac_vnc.html to open it in Chrome or Edge.(双击 mac_vnc.html 在浏览器中打开。)Ensure the Proxy URL matches your local port (default: ws://127.0.0.1:6080).(确认界面上的代理端口与运行的一致。)Click Connect. When prompted, enter your Mac Login Username and Password.(点击连接，根据弹窗提示输入 Mac 的登录账号与密码。)Enjoy a flawless remote desktop experience!(享受丝滑的远程控制体验！)💡 Tips for the Best Experience / 终极体验优化指南If you have a Retina Mac (4K/5K) and experience lag over Wi-Fi:(如果你控制的是 4K/5K 分辨率的 Mac 且感觉不够跟手：)Check the 🚀 Overdrive Mode in the top bar to force maximum framerate.Uncheck 🪟 Scale to disable JavaScript scaling lag.Crucial: Change your Mac's display resolution to 1920x1080 (HiDPI) during remote sessions. Standard VNC protocol struggles to software-encode 4K pixels quickly enough.🙏 Credits / 致谢声明This project's web frontend utilizes the core RFB implementation from noVNC via CDN. We extend our gratitude to the noVNC team for their incredible open-source contribution to browser-based VNC clients.(本项目的网页前端核心 RFB 协议解析依赖于优秀的开源项目 noVNC（通过 CDN 引入）。特此向 noVNC 团队在浏览器 VNC 客户端领域做出的卓越贡献表示感谢！)📜 LicenseMIT LicenseCopyright (c) 2024Permission is hereby granted, free of charge, to any person obtaining a copyof this software and associated documentation files (the "Software"), to dealin the Software without restriction, including without limitation the rightsto use, copy, modify, merge, publish, distribute, sublicense, and/or sellcopies of the Software, and to permit persons to whom the Software isfurnished to do so, subject to the following conditions:The above copyright notice and this permission notice shall be included in allcopies or substantial portions of the Software.THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS ORIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THEAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHERLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THESOFTWARE.
+🍏 MacVNC-Turbo
+
+📖 Description / 项目简介
+
+MacVNC-Turbo is a brutally minimalist, zero-dependency solution for remote controlling a Mac from Windows.
+
+Its biggest feature: A tiny, standalone WebSocket proxy. You do not need to install any heavy third-party remote control software, clients, or runtime libraries on either machine. Just run the lightweight proxy executable, open the HTML file in your browser, and you get instant, ultra-low latency, native access to your macOS desktop.
+
+MacVNC-Turbo 是一个极致精简、零依赖的跨平台 Mac 远程控制解决方案。
+
+我们最大的特点： 核心仅包含一个极小的 WebSocket 代理程序。你完全不需要在两端安装任何臃肿的第三方远程软件、客户端或运行库。只需运行这个轻量级的代理，用浏览器打开一个网页，就可以直接获得超低延迟的 Mac 桌面控制权！极客、纯净、即插即用。
+
+✨ Features / 核心特性
+
+🪶 Zero Dependencies & Browser-Based: No installations required. Connect directly via Chrome or Edge using a single HTML file.
+(零依赖 & 纯浏览器控制：无需安装任何客户端，一个 HTML 文件直接在 Edge/Chrome 浏览器中完成控制。)
+
+🚀 Tiny Ultra-Low Latency Proxy: A micro C++ native Windows proxy (WebSockify) that translates VNC frames at nanosecond speed.
+(极小体积的低延迟代理：原生的 C++ 微型代理程序，纳秒级转发 VNC 数据包，榨干局域网极限。)
+
+💻 Protocol-Level Modifier Swapping: Seamlessly use your Windows Ctrl key as the Mac Cmd key (e.g., Ctrl+C, Ctrl+V). Implemented via internal RFB protocol monkey-patching—zero double-typing bugs!
+(底层协议级按键映射：在 Windows 上习惯性按下 Ctrl+C/V/A，系统会自动将其在底层转换为 Mac 的 Cmd 指令发送，彻底消灭双击/抢跑 Bug。)
+
+🏎️ Overdrive Mode: Force macOS to stop applying heavy compression algorithms and let your Windows GPU take over the 3D rendering workload.
+(Overdrive 性能全开模式：强制接管浏览器 GPU 3D 渲染，解放高分辨率（Retina）下的卡顿灾难。)
+
+🪟 Pixel-Perfect 1:1 Display: Easily disable scaling to enjoy perfectly crisp, unscaled retina display text.
+(像素级原画显示：支持关闭浏览器缩放，实现 1:1 绝对物理像素点对点显示，字体锐利清晰。)
+
+🍏 Apple Auth Support: Automatically handles macOS's proprietary VNC authentication (requiring both username and password).
+(完美兼容 Apple Auth 协议：自动处理 macOS 专属的用户名+密码二次安全校验，告别连接卡死。)
+
+🛠️ Usage / 如何使用
+
+Step 1: Run the Proxy / 运行底层代理 (Windows)
+
+Run the compiled proxy executable, pointing it to your Mac's IP address and a local port of your choice (e.g., 6080).
+(直接运行代理程序，指向你 Mac 在局域网的 IP 地址即可打通隧道：)
+
+proxy.exe <Your_Mac_IP> 6080
+
+
+Step 2: Connect via the Web Client / 网页端一键连接
+
+Double click mac_vnc.html to open it in Chrome or Edge.
+(双击 mac_vnc.html 在浏览器中打开。)
+
+Ensure the Proxy URL matches your local port (default: ws://127.0.0.1:6080).
+(确认界面上的代理端口与运行的一致。)
+
+Click Connect. When prompted, enter your Mac Login Username and Password.
+(点击连接，根据弹窗提示输入 Mac 的登录账号与密码。)
+
+Enjoy a flawless remote desktop experience!
+(享受丝滑的远程控制体验！)
+
+💡 Tips for the Best Experience / 终极体验优化指南
+
+If you have a Retina Mac (4K/5K) and experience lag over Wi-Fi:
+(如果你控制的是 4K/5K 分辨率的 Mac 且感觉不够跟手：)
+
+Check the 🚀 Overdrive Mode in the top bar to force maximum framerate.
+
+Uncheck 🪟 Scale to disable JavaScript scaling lag.
+
+Crucial: Change your Mac's display resolution to 1920x1080 (HiDPI) during remote sessions. Standard VNC protocol struggles to software-encode 4K pixels quickly enough.
+
+🙏 Credits / 致谢声明
+
+This project's web frontend utilizes the core RFB implementation from noVNC via CDN. We extend our gratitude to the noVNC team for their incredible open-source contribution to browser-based VNC clients.
+(本项目的网页前端核心 RFB 协议解析依赖于优秀的开源项目 noVNC（通过 CDN 引入）。特此向 noVNC 团队在浏览器 VNC 客户端领域做出的卓越贡献表示感谢！)
+
+📜 License
+
+MIT License
+
+Copyright (c) 2024
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
