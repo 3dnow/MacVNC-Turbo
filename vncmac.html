@@ -149,7 +149,8 @@
 
 
     <script type="module">
-    
+        
+        // 【在这里粘贴打包好的 JS 代码...】
      
 // node_modules/@novnc/novnc/core/util/int.js
 function toUnsigned32bit(toConvert) {
@@ -14317,19 +14318,29 @@ window.RFB = RFB;
 
     </script>
     <script type="module">
+
+if (navigator.clipboard) {
+            navigator.clipboard.readText = async () => { 
+                return "";
+            };
+            if (navigator.clipboard.read) {
+                navigator.clipboard.read = async () => { return []; };
+            }
+        }
  async function bootApp() {
             const statusSpan = document.getElementById('status');
             const connectBtn = document.getElementById('connectBtn');
             
             statusSpan.innerText = "Loading Core...";
-            connectBtn.disabled = true; 
+            connectBtn.disabled = true; // disable input before load
 
-            
+
+            // wait for rfb core
             while (!window.RFB) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
             
-            
+            // core is ready!
             const RFB = window.RFB;
             statusSpan.innerText = "Ready";
             connectBtn.disabled = false;
@@ -14493,7 +14504,7 @@ window.RFB = RFB;
             });
         }
 
-        //boot the App
+        // bootapp
         bootApp();
     </script>
 </body>
