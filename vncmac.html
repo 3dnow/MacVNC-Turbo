@@ -115,7 +115,7 @@
         <div class="controls">
             <div class="server-input-wrapper" title="Proxy Server Address">
                 <span>🔌 Proxy:</span>
-                <input type="text" id="wsUrl" value="ws://127.0.0.1:6080">
+                <input type="text" id="wsUrl" value="ws://127.0.0.1:6800/?token=LqhDPjhfkjkun5D2K1V0L9ZYI6LW8QMpOEJauqGmDlMAvC4H">
             </div>
 
             <div class="divider"></div>
@@ -141,6 +141,9 @@
         </div>
 
         <div class="action-area">
+	   <button class="btn" id="btnSendClipboard" title="Send Local Cilpboard to Mac" style="background:#10b981;">📋Web -> Mac</button>
+	   <button class="btn" id="btnGetClipboard" title="Get Cilpboard from Mac to Local" style="background:#f59e0b;">📋Mac -> Web</button>
+
             <span id="status">Ready</span>
             <button class="btn" id="connectBtn">Connect</button>
         </div>
@@ -11598,6 +11601,7 @@ var DISCONNECT_TIMEOUT = 3;
 var DEFAULT_BACKGROUND = "rgb(40, 40, 40)";
 var MOUSE_MOVE_DELAY = 17;
 var WHEEL_STEP = 50;
+var SCROLL_MULTIPLIER = 15;  // macOS 建议 10~30，根据体感调整
 var WHEEL_LINE_HEIGHT = 19;
 var GESTURE_ZOOMSENS = 75;
 var GESTURE_SCRLSENS = 50;
@@ -11870,6 +11874,7 @@ var RFB = class _RFB extends EventTargetMixin {
       this._sendEncodings();
     }
   }
+
   get compressionLevel() {
     return this._compressionLevel;
   }
@@ -12512,50 +12517,67 @@ var RFB = class _RFB extends EventTargetMixin {
       );
     }
   }
-  _handleWheel(ev) {
+// 在文件顶部找到 WHEEL_STEP 常量附近，加一个倍率
+//const WHEEL_STEP = 10;
+
+_handleWheel(ev) {
     if (this._rfbConnectionState !== "connected") {
-      return;
+        return;
     }
     if (this._viewOnly) {
-      return;
+        return;
     }
+
     ev.stopPropagation();
     ev.preventDefault();
-    let pos = clientToElement(
-      ev.clientX,
-      ev.clientY,
-      this._canvas
-    );
+
+    let pos = clientToElement(ev.clientX, ev.clientY, this._canvas);
     let bmask = _RFB._convertButtonMask(ev.buttons);
+
     let dX = ev.deltaX;
     let dY = ev.deltaY;
+
     if (ev.deltaMode !== 0) {
-      dX *= WHEEL_LINE_HEIGHT;
-      dY *= WHEEL_LINE_HEIGHT;
+        dX *= WHEEL_LINE_HEIGHT;
+        dY *= WHEEL_LINE_HEIGHT;
     }
+
     this._accumulatedWheelDeltaX += dX;
     this._accumulatedWheelDeltaY += dY;
-    if (Math.abs(this._accumulatedWheelDeltaX) >= WHEEL_STEP) {
-      if (this._accumulatedWheelDeltaX < 0) {
-        this._handleMouseButton(pos.x, pos.y, bmask | 1 << 5);
-        this._handleMouseButton(pos.x, pos.y, bmask);
-      } else if (this._accumulatedWheelDeltaX > 0) {
-        this._handleMouseButton(pos.x, pos.y, bmask | 1 << 6);
-        this._handleMouseButton(pos.x, pos.y, bmask);
-      }
-      this._accumulatedWheelDeltaX = 0;
+
+    // 水平滚动
+    while (Math.abs(this._accumulatedWheelDeltaX) >= WHEEL_STEP) {
+        let buttonMask;
+        if (this._accumulatedWheelDeltaX < 0) {
+            buttonMask = bmask | (1 << 5);
+            this._accumulatedWheelDeltaX += WHEEL_STEP;
+        } else {
+            buttonMask = bmask | (1 << 6);
+            this._accumulatedWheelDeltaX -= WHEEL_STEP;
+        }
+        for (let i = 0; i < SCROLL_MULTIPLIER; i++) {
+            this._handleMouseButton(pos.x, pos.y, buttonMask);
+            this._handleMouseButton(pos.x, pos.y, bmask);
+        }
     }
-    if (Math.abs(this._accumulatedWheelDeltaY) >= WHEEL_STEP) {
-      if (this._accumulatedWheelDeltaY < 0) {
-        this._handleMouseButton(pos.x, pos.y, bmask | 1 << 3);
-        this._handleMouseButton(pos.x, pos.y, bmask);
-      } else if (this._accumulatedWheelDeltaY > 0) {
-        this._handleMouseButton(pos.x, pos.y, bmask | 1 << 4);
-        this._handleMouseButton(pos.x, pos.y, bmask);
-      }
-      this._accumulatedWheelDeltaY = 0;
+
+    // 垂直滚动
+    while (Math.abs(this._accumulatedWheelDeltaY) >= WHEEL_STEP) {
+        let buttonMask;
+        if (this._accumulatedWheelDeltaY < 0) {
+            buttonMask = bmask | (1 << 3);
+            this._accumulatedWheelDeltaY += WHEEL_STEP;
+        } else {
+            buttonMask = bmask | (1 << 4);
+            this._accumulatedWheelDeltaY -= WHEEL_STEP;
+        }
+        for (let i = 0; i < SCROLL_MULTIPLIER; i++) {
+            this._handleMouseButton(pos.x, pos.y, buttonMask);
+            this._handleMouseButton(pos.x, pos.y, bmask);
+        }
     }
-  }
+}
+
   _fakeMouseMove(ev, elementX, elementY) {
     this._handleMouseMove(elementX, elementY);
     this._cursor.move(ev.detail.clientX, ev.detail.clientY);
@@ -14319,6 +14341,7 @@ window.RFB = RFB;
     </script>
     <script type="module">
 
+
 if (navigator.clipboard) {
             navigator.clipboard.readText = async () => { 
                 return "";
@@ -14330,7 +14353,9 @@ if (navigator.clipboard) {
  async function bootApp() {
             const statusSpan = document.getElementById('status');
             const connectBtn = document.getElementById('connectBtn');
-            
+            const btnSendClipboard = document.getElementById('btnSendClipboard');
+	    const btnGetClipboard = document.getElementById('btnGetClipboard');
+
             statusSpan.innerText = "Loading Core...";
             connectBtn.disabled = true; // disable input before load
 
@@ -14352,6 +14377,30 @@ if (navigator.clipboard) {
             const cSlider = document.getElementById('compression');
             const overdriveBtn = document.getElementById('overdriveBtn');
             const scaleBtn = document.getElementById('scaleBtn');
+
+            let macClipboardText = ""; 
+            let frameRequestInterval = null; 
+
+            btnSendClipboard.addEventListener('click', async () => {
+                if (!rfb) { alert("Please connect to Macos first!"); return; }
+                try {
+                    const text = await navigator.clipboard.readText();
+                    rfb.clipboardPasteFrom(text);
+                    // alert("✅ Clipboard sent to the Macos");
+                } catch (err) {
+                    alert("❌ Read clipboard failed, please allow the request in the browser\n" + err);
+                }
+            });
+
+            btnGetClipboard.addEventListener('click', async () => {
+                if (!macClipboardText) { alert("Mac clipboard is null or no copy action happens since we connected"); return; }
+                try {
+                    await navigator.clipboard.writeText(macClipboardText);
+                    alert("✅ Copy clipboard OK!\n\nPreview：" + macClipboardText.substring(0, 50) + "...");
+                } catch (err) {
+                    alert("❌ Failed to write clipboard, maybe rejected by browser!\n" + err);
+                }
+            });
 
             // ==========================================
             // UI Interaction Logic
@@ -14432,21 +14481,134 @@ if (navigator.clipboard) {
                 statusSpan.innerText = "Negotiating...";
                 
                 try {
+
                     rfb = new RFB(screenDiv, wsUrl);
 
-                    // Protocol-Level Monkey Patch for Ctrl/Cmd swap
-                    const originalSendKey = rfb.sendKey;
-                    rfb.sendKey = function() {
-                        let keysym = arguments[0];
-                        if (keysym === 0xFFE3) { keysym = 0xFFEB; }      
-                        else if (keysym === 0xFFE4) { keysym = 0xFFEC; } 
-                        else if (keysym === 0xFFEB) { keysym = 0xFFE3; } 
-                        else if (keysym === 0xFFEC) { keysym = 0xFFE4; } 
-                        
-                        arguments[0] = keysym;
-                        return originalSendKey.apply(rfb, arguments);
-                    };
-                    
+                    rfb.addEventListener('clipboard', (e) => {
+                        macClipboardText = e.detail.text;
+                    });
+			const originalSendKey = rfb.sendKey;
+   			 const XK_Control_L = 0xFFE3;
+    			const XK_Control_R = 0xFFE4;
+    			const XK_Super_L   = 0xFFEB;
+    			const XK_Super_R   = 0xFFEC;
+    			const XK_space     = 0x0020;
+
+			    let ctrlLeftDown = false;
+    			let ctrlRightDown = false;
+    			let superLeftDown = false;
+    			let superRightDown = false;
+    const remapKeysyms = new Set([
+        0x0061, // a
+        0x0063, // c
+        0x0066, // f
+        0x006E, // n
+        0x0073, // s
+        0x0074, // t
+        0x0076, // v
+        0x0077, // w
+        0x0078, // x
+        0x007A, // z
+
+        0x0041, // A
+        0x0043, // C
+        0x0046, // F
+        0x004E, // N
+        0x0053, // S
+        0x0054, // T
+        0x0056, // V
+        0x0057, // W
+        0x0058, // X
+        0x005A, // Z
+    ]);
+    function isCtrlKeysym(keysym) {
+        return keysym === XK_Control_L || keysym === XK_Control_R;
+    }
+
+    function isSuperKeysym(keysym) {
+        return keysym === XK_Super_L || keysym === XK_Super_R;
+    }
+
+    function anyCtrlDown() {
+        return ctrlLeftDown || ctrlRightDown;
+    }
+
+    function anySuperDown() {
+        return superLeftDown || superRightDown;
+    }
+
+    function updateModifierState(keysym, down) {
+        switch (keysym) {
+            case XK_Control_L:
+                ctrlLeftDown = down;
+                break;
+            case XK_Control_R:
+                ctrlRightDown = down;
+                break;
+            case XK_Super_L:
+                superLeftDown = down;
+                break;
+            case XK_Super_R:
+                superRightDown = down;
+                break;
+        }
+    }
+
+    function send(keysym, code, down) {
+        return originalSendKey.call(rfb ,keysym, code, down);
+    }
+
+
+
+
+
+   rfb.sendKey = function (keysym, code, down) {
+
+        if (isCtrlKeysym(keysym) || isSuperKeysym(keysym)) {
+            updateModifierState(keysym, down);
+            return send(keysym, code, down);
+        }
+
+
+        if (anyCtrlDown() && keysym === XK_space) {
+            return send(keysym, code, down);
+        }
+
+
+        if (anyCtrlDown() && !anySuperDown() && remapKeysyms.has(keysym)) {
+            const useLeftCtrl = ctrlLeftDown;
+            const fakeSuper = useLeftCtrl ? XK_Super_L : XK_Super_R;
+            const realCtrl  = useLeftCtrl ? XK_Control_L : XK_Control_R;
+
+            if (down) {
+           
+                send(realCtrl, realCtrl === XK_Control_L ? 'ControlLeft' : 'ControlRight', false);
+
+             
+                send(fakeSuper, fakeSuper === XK_Super_L ? 'MetaLeft' : 'MetaRight', true);
+
+             
+                return send(keysym, code, true);
+            } else {
+                
+                send(keysym, code, false);
+
+               
+                send(fakeSuper, fakeSuper === XK_Super_L ? 'MetaLeft' : 'MetaRight', false);
+
+                // 
+                if (anyCtrlDown()) {
+                    send(realCtrl, realCtrl === XK_Control_L ? 'ControlLeft' : 'ControlRight', true);
+                }
+                return;
+            }
+        }
+
+        // 
+        return send(keysym, code, down);
+    };
+
+
                     rfb.scaleViewport = scaleBtn.checked;
                     if(!scaleBtn.checked) {
                         screenDiv.style.alignItems = 'flex-start';
@@ -14487,6 +14649,14 @@ if (navigator.clipboard) {
                             const canvas = screenDiv.querySelector('canvas');
                             if (canvas) canvas.classList.add('overdrive-active');
                         }
+
+                        if (frameRequestInterval) clearInterval(frameRequestInterval);
+                        frameRequestInterval = setInterval(() => {
+                            // request increment screenshot from mac using noVNC apis
+                            if (rfb && rfb._rfbConnectionState === 'connected' && rfb._sock) {
+                                RFB.messages.fbUpdateRequest(rfb._sock, true, 0, 0, rfb._fbWidth, rfb._fbHeight);
+                            }
+                        }, 16); 
                     });
 
                     rfb.addEventListener("disconnect", (e) => {
@@ -14495,6 +14665,14 @@ if (navigator.clipboard) {
                         connectBtn.innerText = "Connect";
                         connectBtn.classList.remove("btn-danger");
                         wsUrlInput.disabled = false;
+			
+			//relase the timer
+
+                        if (frameRequestInterval) {
+                            clearInterval(frameRequestInterval);
+                            frameRequestInterval = null;
+                        }
+
                         rfb = null;
                     });
 
