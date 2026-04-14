@@ -121,9 +121,9 @@ If you have a Retina Mac (4K/5K) and experience lag over Wi-Fi:
 
 ## 🙏 Credits / 致谢声明
 
-This project's web frontend utilizes the core RFB implementation from [noVNC](https://github.com/novnc/noVNC) via CDN. We extend our gratitude to the noVNC team for their incredible open-source contribution to browser-based VNC clients.
+This project's web frontend utilizes the core RFB implementation from [noVNC](https://github.com/novnc/noVNC). We extend our gratitude to the noVNC team for their incredible open-source contribution to browser-based VNC clients.
 
-（本项目的网页前端核心 RFB 协议解析依赖于优秀的开源项目 noVNC（通过 CDN 引入）。特此向 noVNC 团队致谢！）
+（本项目的网页前端核心 RFB 协议解析依赖于优秀的开源项目 noVNC。特此向 noVNC 团队致谢！）
 
 \---
 
