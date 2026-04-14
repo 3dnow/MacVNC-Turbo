@@ -103,6 +103,17 @@
         .btn-danger { background: var(--accent-red); }
         .btn-danger:hover { background: #dc2626; }
         #status { color: var(--text-muted); font-size: 13px; font-weight: 500;}
+
+        /* Clipboard Bridge */
+        #clipBridgeUrl {
+            background: #27272a; color: #fff; border: 1px solid #3f3f46;
+            padding: 3px 7px; border-radius: 4px; font-size: 11px; font-family: monospace;
+            width: 165px; transition: border-color 0.2s;
+        }
+        #clipBridgeUrl:focus { outline: none; border-color: var(--accent-green); }
+        #clipBridgeDot { font-size: 14px; line-height: 1; cursor: default; }
+        .clip-bridge-row { display: flex; align-items: center; gap: 6px; }
+        .clip-bridge-row span.label { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
     </style>
 </head>
 <body>
@@ -115,7 +126,7 @@
         <div class="controls">
             <div class="server-input-wrapper" title="Proxy Server Address">
                 <span>🔌 Proxy:</span>
-                <input type="text" id="wsUrl" value="ws://127.0.0.1:6800/?token=LqhDPjhfkjkun5D2K1V0L9ZYI6LW8QMpOEJauqGmDlMAvC4H">
+                <input type="text" id="wsUrl" value="ws://127.0.0.1:6800/?token=Your_Secret_Token_Key">
             </div>
 
             <div class="divider"></div>
@@ -141,9 +152,16 @@
         </div>
 
         <div class="action-area">
-	   <button class="btn" id="btnSendClipboard" title="Send Local Cilpboard to Mac" style="background:#10b981;">📋Web -> Mac</button>
-	   <button class="btn" id="btnGetClipboard" title="Get Cilpboard from Mac to Local" style="background:#f59e0b;">📋Mac -> Web</button>
-
+            <!-- Clipboard Bridge connection -->
+            <div class="clip-bridge-row">
+                <span class="label">📋 Bridge:</span>
+                <input type="text" id="clipBridgeUrl" value="ws://127.0.0.1:9001">
+                <button class="btn" id="clipBridgeBtn" style="padding:4px 10px; font-size:11px;">Connect</button>
+                <span id="clipBridgeDot" title="Clipboard Bridge: disconnected">⚫</span>
+            </div>
+            <div class="divider"></div>
+            <button class="btn" id="btnSendClipboard" title="Send browser clipboard → Mac (uses Bridge if connected, else types at cursor)" style="background:#10b981;">⌨️ →Mac</button>
+            <button class="btn" id="btnGetClipboard"  title="Get Mac clipboard → browser (requires Bridge)" style="background:#f59e0b;">📋 Mac→</button>
             <span id="status">Ready</span>
             <button class="btn" id="connectBtn">Connect</button>
         </div>
@@ -1136,6 +1154,7 @@ var AsyncClipboard = class {
     return this._isAvailable;
   }
   async _handleFocus(event) {
+return;
     if (!await this._ensureAvailable()) return;
     try {
       const text = await navigator.clipboard.readText();
@@ -1146,6 +1165,7 @@ var AsyncClipboard = class {
   }
   // ===== PUBLIC METHODS =====
   writeClipboard(text) {
+console.log("hi!");
     if (!this._isAvailable) return false;
     navigator.clipboard.writeText(text).catch((error) => Error2("Clipboard write failed: ", error));
     return true;
@@ -11969,21 +11989,7 @@ var RFB = class _RFB extends EventTargetMixin {
       this._clipboardText = text;
       _RFB.messages.extendedClipboardNotify(this._sock, [extendedClipboardFormatText]);
     } else {
-      let length, i;
-      let data;
-      length = 0;
-      for (let codePoint of text) {
-        length++;
-      }
-      data = new Uint8Array(length);
-      i = 0;
-      for (let codePoint of text) {
-        let code = codePoint.codePointAt(0);
-        if (code > 255) {
-          code = 63;
-        }
-        data[i++] = code;
-      }
+	const data = new TextEncoder().encode(text);
       _RFB.messages.clientCutText(this._sock, data);
     }
   }
@@ -13459,13 +13465,12 @@ _handleWheel(ev) {
   }
   _writeClipboard(text) {
     if (this._viewOnly) return;
-    if (this._asyncClipboard.writeClipboard(text)) return;
     this.dispatchEvent(
       new CustomEvent("clipboard", { detail: { text } })
     );
+    if (this._asyncClipboard.writeClipboard(text)) return;
   }
   _handleServerCutText() {
-    Debug("ServerCutText");
     if (this._sock.rQwait("ServerCutText header", 7, 1)) {
       return false;
     }
@@ -13476,7 +13481,8 @@ _handleWheel(ev) {
       return false;
     }
     if (length >= 0) {
-      const text = this._sock.rQshiftStr(length);
+	const bytes = this._sock.rQshiftBytes(length);
+	const text = new TextDecoder().decode(bytes);
       if (this._viewOnly) {
         return true;
       }
@@ -14342,14 +14348,7 @@ window.RFB = RFB;
     <script type="module">
 
 
-if (navigator.clipboard) {
-            navigator.clipboard.readText = async () => { 
-                return "";
-            };
-            if (navigator.clipboard.read) {
-                navigator.clipboard.read = async () => { return []; };
-            }
-        }
+
  async function bootApp() {
             const statusSpan = document.getElementById('status');
             const connectBtn = document.getElementById('connectBtn');
@@ -14378,27 +14377,195 @@ if (navigator.clipboard) {
             const overdriveBtn = document.getElementById('overdriveBtn');
             const scaleBtn = document.getElementById('scaleBtn');
 
-            let macClipboardText = ""; 
-            let frameRequestInterval = null; 
+            let frameRequestInterval = null;
+
+            // ==========================================
+            // Clipboard Bridge WebSocket
+            // ==========================================
+            const clipBridgeUrlInput = document.getElementById('clipBridgeUrl');
+            const clipBridgeBtn      = document.getElementById('clipBridgeBtn');
+            const clipBridgeDot      = document.getElementById('clipBridgeDot');
+
+            let clipWs          = null;   // the bridge WebSocket
+            let clipPendingResolve = null; // pending promise for get/set response
+
+            function setClipBridgeUI(state) {
+                // state: 'disconnected' | 'connecting' | 'connected'
+                const map = {
+                    disconnected: { dot: '⚫', title: 'Clipboard Bridge: disconnected', btnText: 'Connect',    btnDisabled: false },
+                    connecting:   { dot: '🟡', title: 'Clipboard Bridge: connecting…',  btnText: 'Connecting', btnDisabled: true  },
+                    connected:    { dot: '🟢', title: 'Clipboard Bridge: connected',     btnText: 'Disconnect', btnDisabled: false },
+                };
+                const s = map[state];
+                clipBridgeDot.textContent = s.dot;
+                clipBridgeDot.title       = s.title;
+                clipBridgeBtn.textContent = s.btnText;
+                clipBridgeBtn.disabled    = s.btnDisabled;
+
+                // Update button labels to reflect whether bridge is active
+                const send = document.getElementById('btnSendClipboard');
+                const get  = document.getElementById('btnGetClipboard');
+                if (state === 'connected') {
+                    send.textContent = '📋 →Mac';
+                    send.title = 'Set Mac clipboard via Bridge, then Cmd+V on Mac';
+                    get.textContent  = '📋 Mac→';
+                    get.title = 'Get Mac clipboard via Bridge → browser clipboard';
+                } else {
+                    send.textContent = '⌨️ →Mac';
+                    send.title = 'Type browser clipboard into Mac at current cursor (Bridge not connected)';
+                    get.textContent  = '📋 Mac→';
+                    get.title = 'Get Mac clipboard (Bridge required)';
+                }
+            }
+
+            let clipBridgeUserClose  = false;  // true when user clicked Disconnect
+            let clipBridgeKeepalive  = null;   // setInterval handle
+
+            clipBridgeBtn.addEventListener('click', () => {
+                if (clipWs && clipWs.readyState <= WebSocket.OPEN) {
+                    clipBridgeUserClose = true;
+                    clipWs.close(1000, 'user disconnect');
+                    return;
+                }
+                const url = clipBridgeUrlInput.value.trim();
+                if (!url) return;
+
+                clipBridgeUserClose = false;
+                setClipBridgeUI('connecting');
+                clipWs = new WebSocket(url);
+
+                clipWs.onopen = () => {
+                    setClipBridgeUI('connected');
+                    console.log('[bridge] connected to', url);
+
+                    // ── Keepalive: send a ping every 25 s to prevent idle timeout ──
+                    // (NAT/routers typically close idle TCP after 30-60 s)
+                    clearInterval(clipBridgeKeepalive);
+                    clipBridgeKeepalive = setInterval(() => {
+                        if (clipWs && clipWs.readyState === WebSocket.OPEN) {
+                            clipWs.send(JSON.stringify({ cmd: 'ping' }));
+                        }
+                    }, 25000);
+                };
+
+                clipWs.onmessage = (evt) => {
+                    try {
+                        const msg = JSON.parse(evt.data);
+                        if (msg.cmd === 'pong') return;  // swallow keepalive responses
+                        if (clipPendingResolve) {
+                            const resolve = clipPendingResolve;
+                            clipPendingResolve = null;
+                            resolve(msg);
+                        }
+                    } catch (e) {
+                        console.error('[bridge] bad JSON', e);
+                    }
+                };
+
+                clipWs.onclose = (evt) => {
+                    clearInterval(clipBridgeKeepalive);
+                    clipBridgeKeepalive = null;
+
+                    const wasUser = clipBridgeUserClose;
+                    clipBridgeUserClose = false;
+                    clipWs = null;
+
+                    setClipBridgeUI('disconnected');
+
+                    if (!wasUser) {
+                        // Unexpected drop — make it very visible
+                        clipBridgeDot.textContent = '🔴';
+                        clipBridgeDot.title = `Bridge dropped (code ${evt.code})`;
+
+                        let detail = '';
+                        if (evt.code === 1006) {
+                            // 1006 = abnormal closure: connection refused, server crashed,
+                            // or HTTP 403 (wrong token) — browser never gets a clean close frame
+                            detail = 'Connection failed or dropped abnormally.\n'
+                                   + 'Possible causes:\n'
+                                   + '  • clipboard_bridge.py is not running on Mac\n'
+                                   + '  • Wrong IP / port in the URL\n'
+                                   + '  • Wrong or missing token (got HTTP 403)\n'
+                                   + '  • Network/firewall blocked the connection';
+                        } else if (evt.code === 1001) {
+                            detail = 'Server went away (bridge process exited).';
+                        } else {
+                            detail = evt.reason
+                                ? `Reason: ${evt.reason}`
+                                : `Close code: ${evt.code}`;
+                        }
+
+                        alert(`⚠️ Clipboard Bridge disconnected unexpectedly!\n\n${detail}\n\nRestart clipboard_bridge.py on Mac and reconnect.`);
+                    }
+
+                    if (clipPendingResolve) {
+                        const resolve = clipPendingResolve;
+                        clipPendingResolve = null;
+                        resolve({ cmd: 'error', msg: 'bridge disconnected' });
+                    }
+                };
+
+                clipWs.onerror = () => {
+                    // onclose fires right after onerror, so no extra action needed
+                    console.error('[bridge] WebSocket error');
+                };
+            });
+
+            // Send a JSON command to the bridge and wait for the response (promise-based)
+            function bridgeRequest(msgObj, timeoutMs = 5000) {
+                return new Promise((resolve) => {
+                    if (!clipWs || clipWs.readyState !== WebSocket.OPEN) {
+                        resolve({ cmd: 'error', msg: 'bridge not connected' });
+                        return;
+                    }
+                    let settled = false;
+                    const settle = (val) => { if (!settled) { settled = true; resolve(val); } };
+                    clipPendingResolve = settle;
+                    clipWs.send(JSON.stringify(msgObj));
+                    setTimeout(() => settle({ cmd: 'error', msg: 'timeout' }), timeoutMs);
+                });
+            }
 
             btnSendClipboard.addEventListener('click', async () => {
-                if (!rfb) { alert("Please connect to Macos first!"); return; }
+                if (!rfb) { alert("Please connect to Mac first!"); return; }
+                if (!clipWs || clipWs.readyState !== WebSocket.OPEN) {
+                    alert("⚠️ Clipboard Bridge not connected.\n\nStart clipboard_bridge.py on Mac, then click Connect in the Bridge row above.");
+                    return;
+                }
+                let text;
                 try {
-                    const text = await navigator.clipboard.readText();
-                    rfb.clipboardPasteFrom(text);
-                    // alert("✅ Clipboard sent to the Macos");
+                    text = await navigator.clipboard.readText();
                 } catch (err) {
-                    alert("❌ Read clipboard failed, please allow the request in the browser\n" + err);
+                    alert("❌ Read browser clipboard failed (allow clipboard permission)\n" + err); return;
+                }
+                if (!text) { alert("⚠️ Browser clipboard is empty or contains non-text content."); return; }
+
+                const resp = await bridgeRequest({ cmd: 'set', text });
+                if (resp.cmd === 'ok') {
+                    alert(`✅ Mac clipboard set!\n\nPreview: "${text.substring(0, 80)}"${text.length > 80 ? '…' : ''}\n\nNow press Cmd+V on Mac.`);
+                } else {
+                    alert(`❌ Bridge error: ${resp.msg}`);
                 }
             });
 
             btnGetClipboard.addEventListener('click', async () => {
-                if (!macClipboardText) { alert("Mac clipboard is null or no copy action happens since we connected"); return; }
-                try {
-                    await navigator.clipboard.writeText(macClipboardText);
-                    alert("✅ Copy clipboard OK!\n\nPreview：" + macClipboardText.substring(0, 50) + "...");
-                } catch (err) {
-                    alert("❌ Failed to write clipboard, maybe rejected by browser!\n" + err);
+                if (!rfb) { alert("Please connect to Mac first!"); return; }
+                if (!clipWs || clipWs.readyState !== WebSocket.OPEN) {
+                    alert("⚠️ Clipboard Bridge not connected.\n\nApple's built-in VNC server does not push clipboard events.\n\nStart clipboard_bridge.py on Mac, then click Connect in the Bridge row above.");
+                    return;
+                }
+
+                const resp = await bridgeRequest({ cmd: 'get' });
+                if (resp.cmd === 'clipboard') {
+                    if (!resp.text) { alert("Mac clipboard is empty."); return; }
+                    try {
+                        await navigator.clipboard.writeText(resp.text);
+                        alert(`✅ Got from Mac!\n\nPreview: "${resp.text.substring(0, 80)}"${resp.text.length > 80 ? '…' : ''}`);
+                    } catch (e) {
+                        alert("❌ Failed to write browser clipboard:\n" + e);
+                    }
+                } else {
+                    alert(`❌ Bridge error: ${resp.msg}`);
                 }
             });
 
@@ -14484,130 +14651,100 @@ if (navigator.clipboard) {
 
                     rfb = new RFB(screenDiv, wsUrl);
 
-                    rfb.addEventListener('clipboard', (e) => {
-                        macClipboardText = e.detail.text;
-                    });
 			const originalSendKey = rfb.sendKey;
-   			 const XK_Control_L = 0xFFE3;
-    			const XK_Control_R = 0xFFE4;
-    			const XK_Super_L   = 0xFFEB;
-    			const XK_Super_R   = 0xFFEC;
-    			const XK_space     = 0x0020;
 
-			    let ctrlLeftDown = false;
-    			let ctrlRightDown = false;
-    			let superLeftDown = false;
-    			let superRightDown = false;
-    const remapKeysyms = new Set([
-        0x0061, // a
-        0x0063, // c
-        0x0066, // f
-        0x006E, // n
-        0x0073, // s
-        0x0074, // t
-        0x0076, // v
-        0x0077, // w
-        0x0078, // x
-        0x007A, // z
+                    // ── X11 keysym constants ──────────────────────────────────────
+                    const XK_Control_L = 0xFFE3;
+                    const XK_Control_R = 0xFFE4;
+                    const XK_Shift_L   = 0xFFE1;
+                    const XK_Shift_R   = 0xFFE2;
+                    const XK_Super_L   = 0xFFEB;
+                    const XK_Super_R   = 0xFFEC;
+                    const XK_space     = 0x0020;
 
-        0x0041, // A
-        0x0043, // C
-        0x0046, // F
-        0x004E, // N
-        0x0053, // S
-        0x0054, // T
-        0x0056, // V
-        0x0057, // W
-        0x0058, // X
-        0x005A, // Z
-    ]);
-    function isCtrlKeysym(keysym) {
-        return keysym === XK_Control_L || keysym === XK_Control_R;
-    }
+                    // ── Modifier state ────────────────────────────────────────────
+                    let ctrlLeftDown   = false;
+                    let ctrlRightDown  = false;
+                    let shiftLeftDown  = false;
+                    let shiftRightDown = false;
+                    let superLeftDown  = false;
+                    let superRightDown = false;
 
-    function isSuperKeysym(keysym) {
-        return keysym === XK_Super_L || keysym === XK_Super_R;
-    }
+                    // Lowercase only — A-Z handled via normalizeKeysym()
+                    const remapKeysyms = new Set([
+                        0x0061, // a
+                        0x0063, // c
+                        0x0066, // f
+                        0x006E, // n
+                        0x0073, // s
+                        0x0074, // t
+                        0x0076, // v
+                        0x0077, // w
+                        0x0078, // x
+                        0x007A, // z
+                    ]);
 
-    function anyCtrlDown() {
-        return ctrlLeftDown || ctrlRightDown;
-    }
+                    const isCtrlKeysym  = k => k === XK_Control_L || k === XK_Control_R;
+                    const isShiftKeysym = k => k === XK_Shift_L   || k === XK_Shift_R;
+                    const isSuperKeysym = k => k === XK_Super_L   || k === XK_Super_R;
+                    const anyCtrlDown   = () => ctrlLeftDown  || ctrlRightDown;
+                    const anyShiftDown  = () => shiftLeftDown || shiftRightDown;
+                    const anySuperDown  = () => superLeftDown || superRightDown;
 
-    function anySuperDown() {
-        return superLeftDown || superRightDown;
-    }
+                    // A-Z → a-z: lets CapsLock work without producing Shift+Cmd
+                    const normalizeKeysym = k => (k >= 0x41 && k <= 0x5A) ? k + 0x20 : k;
 
-    function updateModifierState(keysym, down) {
-        switch (keysym) {
-            case XK_Control_L:
-                ctrlLeftDown = down;
-                break;
-            case XK_Control_R:
-                ctrlRightDown = down;
-                break;
-            case XK_Super_L:
-                superLeftDown = down;
-                break;
-            case XK_Super_R:
-                superRightDown = down;
-                break;
-        }
-    }
+                    function updateModifierState(keysym, down) {
+                        switch (keysym) {
+                            case XK_Control_L: ctrlLeftDown   = down; break;
+                            case XK_Control_R: ctrlRightDown  = down; break;
+                            case XK_Shift_L:   shiftLeftDown  = down; break;
+                            case XK_Shift_R:   shiftRightDown = down; break;
+                            case XK_Super_L:   superLeftDown  = down; break;
+                            case XK_Super_R:   superRightDown = down; break;
+                        }
+                    }
 
-    function send(keysym, code, down) {
-        return originalSendKey.call(rfb ,keysym, code, down);
-    }
+                    function send(keysym, code, down) {
+                        return originalSendKey.call(rfb, keysym, code, down);
+                    }
 
+                    rfb.sendKey = function(keysym, code, down) {
+                        // Track all modifier keys and pass them through unchanged
+                        if (isCtrlKeysym(keysym) || isShiftKeysym(keysym) || isSuperKeysym(keysym)) {
+                            updateModifierState(keysym, down);
+                            return send(keysym, code, down);
+                        }
 
+                        // Ctrl+Space → pass through as-is (input method switch)
+                        if (anyCtrlDown() && keysym === XK_space) {
+                            return send(keysym, code, down);
+                        }
 
+                        // Left Ctrl + letter → Cmd + letter  (Windows/Linux muscle memory)
+                        //
+                        // Right Ctrl is intentionally NOT remapped: use Right Ctrl+C to send
+                        // real SIGINT in a terminal, Left Ctrl+C to copy (→ Cmd+C).
+                        //
+                        // Skip if Shift is held: remapping Shift+Ctrl+letter would silently
+                        // produce Shift+Cmd+letter — the root cause of the Shift+Cmd+C bug.
+                        const norm = normalizeKeysym(keysym);
+                        if (ctrlLeftDown && !ctrlRightDown && !anySuperDown() && !anyShiftDown()
+                                && remapKeysyms.has(norm)) {
+                            if (down) {
+                                send(XK_Control_L, 'ControlLeft', false); // release Ctrl
+                                send(XK_Super_L,   'MetaLeft',    true);  // press Cmd
+                                return send(norm, code, true);
+                            } else {
+                                send(norm, code, false);
+                                send(XK_Super_L, 'MetaLeft', false);      // release Cmd
+                                if (ctrlLeftDown) send(XK_Control_L, 'ControlLeft', true);
+                                return;
+                            }
+                        }
 
-
-   rfb.sendKey = function (keysym, code, down) {
-
-        if (isCtrlKeysym(keysym) || isSuperKeysym(keysym)) {
-            updateModifierState(keysym, down);
-            return send(keysym, code, down);
-        }
-
-
-        if (anyCtrlDown() && keysym === XK_space) {
-            return send(keysym, code, down);
-        }
-
-
-        if (anyCtrlDown() && !anySuperDown() && remapKeysyms.has(keysym)) {
-            const useLeftCtrl = ctrlLeftDown;
-            const fakeSuper = useLeftCtrl ? XK_Super_L : XK_Super_R;
-            const realCtrl  = useLeftCtrl ? XK_Control_L : XK_Control_R;
-
-            if (down) {
-           
-                send(realCtrl, realCtrl === XK_Control_L ? 'ControlLeft' : 'ControlRight', false);
-
-             
-                send(fakeSuper, fakeSuper === XK_Super_L ? 'MetaLeft' : 'MetaRight', true);
-
-             
-                return send(keysym, code, true);
-            } else {
-                
-                send(keysym, code, false);
-
-               
-                send(fakeSuper, fakeSuper === XK_Super_L ? 'MetaLeft' : 'MetaRight', false);
-
-                // 
-                if (anyCtrlDown()) {
-                    send(realCtrl, realCtrl === XK_Control_L ? 'ControlLeft' : 'ControlRight', true);
-                }
-                return;
-            }
-        }
-
-        // 
-        return send(keysym, code, down);
-    };
-
+                        return send(keysym, code, down);
+                    };
 
                     rfb.scaleViewport = scaleBtn.checked;
                     if(!scaleBtn.checked) {
